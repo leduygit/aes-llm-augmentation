@@ -1,0 +1,36 @@
+# Base configuration for the standalone IELTS AES training pipeline.
+
+# Model parameters
+max_seq_length: 512
+bert_model_name: microsoft/deberta-base
+
+# Training hyperparameters
+learning_rate: 0.0000458115
+num_freeze_layers: 4
+dropout_rate: 0.155934085175111
+batch_size: 32
+epochs: 10
+loss: mean_squared_error
+patience: 50
+use_sigmoid: false
+gradient_accumulation_steps: 1
+use_mixed_precision: false
+gradient_checkpointing: true
+
+# Paths
+data_path: /kaggle/input/mielband-ielts-data-train
+data_folder: original_24-09-20-04-09
+train_folder: training_worst_band
+validation_folder: validation
+test_folder: test
+model_save_path: ./models
+scaler_path: ./scaler_config.pkl
+checkpoint_path: ./best_model.pth
+
+# Device and score bounds
+device: cuda
+min_score: 4.0
+max_score: 9.0
+
+# Data augmentation config selector
+data_augmentation_method: training_worst_band
