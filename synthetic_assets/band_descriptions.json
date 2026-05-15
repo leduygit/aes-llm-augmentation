@@ -1,0 +1,33 @@
+{
+    "5": {
+      "ta": "addresses the task only partially; the format may be inappropriate in places\nexpresses a position but the development is not always clear and there may be no conclusions drawn\npresents some main ideas but these are limited and not sufficiently developed; there may be irrelevant detail",
+      "cc": "presents information with some organisation but there may be a lack of overall progression\nmakes inadequate, inaccurate or over-use of cohesive devices\nmay be repetitive because of lack of referencing and substitution\nmay not write in paragraphs, or paragraphing may be inadequate",
+      "lr": "uses a limited range of vocabulary, but this is minimally adequate for the task\nmay make noticeable errors in spelling and/or word formation that may cause some difficulty for the reader",
+      "gr": "uses only a limited range of structures\nattempts complex sentences but these tend to be less accurate than simple sentences\nmay make frequent grammatical errors and punctuation may be faulty; errors can cause some difficulty for the reader"
+    },
+    "6": {
+      "ta": "addresses all parts of the task although some parts may be more fully covered than others\npresents a relevant position although the conclusions may become unclear or repetitive\npresents relevant main ideas but some may be inadequately developed/unclear",
+      "cc": "arranges information and ideas coherently and there is a clear overall progression\nuses cohesive devices effectively, but cohesion within and/or between sentences may be faulty or mechanical\nmay not always use referencing clearly or appropriately\nuses paragraphing, but not always logically",
+      "lr": "uses an adequate range of vocabulary for the task\nattempts to use less common vocabulary but with some inaccuracy\nmakes some errors in spelling and/or word formation, but they do not impede communication",
+      "gr": "uses a mix of simple and complex sentence forms\nmakes some errors in grammar and punctuation but they rarely reduce communication"
+    },
+    "7": {
+      "ta": "addresses all parts of the task\npresents a clear position throughout the response\npresents, extends and supports main ideas, but there may be a tendency to over-generalise and/or supporting ideas may lack focus",
+      "cc": "logically organises information and ideas; there is clear progression throughout\nuses a range of cohesive devices appropriately although there may be some under-/over-use\npresents a clear central topic within each paragraph",
+      "lr": "uses a sufficient range of vocabulary to allow some flexibility and precision\nuses less common lexical items with some awareness of style and collocation\nmay produce occasional errors in word choice, spelling and/or word formation",
+      "gr": "uses a variety of complex structures\nproduces frequent error-free sentences\nhas good control of grammar and punctuation but may make a few errors"
+    },
+    "8": {
+      "ta": "sufficiently addresses all parts of the task\npresents a well-developed response to the question with relevant, extended and supported ideas",
+      "cc": "sequences information and ideas logically\nmanages all aspects of cohesion well\nuses paragraphing sufficiently and appropriately",
+      "lr": "uses a wide range of vocabulary fluently and flexibly to convey precise meanings\nskilfully uses uncommon lexical items but there may be occasional inaccuracies in word choice and collocation\nproduces rare errors in spelling and/or word formation",
+      "gr": "uses a wide range of structures\nthe majority of sentences are error-free\nmakes only very occasional errors or inappropriacies"
+    },
+    "9": {
+      "ta": "fully addresses all parts of the task\npresents a fully developed position in answer to the question with relevant, fully extended and well supported ideas",
+      "cc": "uses cohesion in such a way that it attracts no attention\nskilfully manages paragraphing",
+      "lr": "uses a wide range of vocabulary with very natural and sophisticated control of lexical features; rare minor errors occur only as 'slips'",
+      "gr": "uses a wide range of structures with full flexibility and accuracy; rare minor errors occur only as 'slips'"
+    }
+  }
+  

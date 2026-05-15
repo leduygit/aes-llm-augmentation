@@ -1,0 +1,6 @@
+.env
+outputs/
+venv/
+*pkl
+__pycache__/
+*.pth

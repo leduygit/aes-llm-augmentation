@@ -1,6 +1,6 @@
 # Configuration for training_worst_band augmentation method.
 
 data_augmentation_method: training_worst_band
-epochs: 50
+epochs: 1
 batch_size: 32
 patience: 50
