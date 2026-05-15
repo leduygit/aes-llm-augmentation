@@ -477,6 +477,46 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     }
 
 
+def compute_per_band_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> pd.DataFrame:
+    """Compute per-band metrics using the same raw-prediction logic as the source repo."""
+    if len(y_true) == 0:
+        return pd.DataFrame(columns=["band", "count", "mse", "mae", "rmse", "mean_pred", "mean_true"])
+
+    frame = pd.DataFrame(
+        {
+            "band": round_ielts_bands(y_true),
+            "target": np.array(y_true, dtype=float),
+            "prediction": np.array(y_pred, dtype=float),
+        }
+    )
+    rows = []
+    for band, group in frame.groupby("band", sort=True):
+        mse = mean_squared_error(group["target"], group["prediction"])
+        rows.append(
+            {
+                "band": float(band),
+                "count": int(len(group)),
+                "mse": mse,
+                "mae": mean_absolute_error(group["target"], group["prediction"]),
+                "rmse": math.sqrt(mse),
+                "mean_pred": float(group["prediction"].mean()),
+                "mean_true": float(group["target"].mean()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def print_per_band_metrics(metrics_df: pd.DataFrame, split_name: str) -> None:
+    print(f"\n{split_name} per-band metrics:")
+    if metrics_df.empty:
+        print("  No samples available.")
+        return
+    display_df = metrics_df.copy()
+    for column in ["mse", "mae", "rmse", "mean_pred", "mean_true"]:
+        display_df[column] = display_df[column].map(lambda value: f"{value:.4f}")
+    print(display_df.to_string(index=False))
+
+
 def setup_device_and_config() -> Tuple[torch.device, Dict[str, Any]]:
     print("=" * 80)
     print("IELTS AES Training Pipeline")
@@ -675,6 +715,13 @@ def evaluate_loader(model: nn.Module, loader: DataLoader, device, split_name: st
     print(f"{split_name} QWK: {metrics['qwk']:.4f}")
     print(f"{split_name} MAPE: {metrics['mape']:.4f}")
     print(f"{split_name} MSE: {metrics['mse']:.4f}")
+    per_band_metrics = compute_per_band_metrics(all_trues, all_preds)
+    print_per_band_metrics(per_band_metrics, split_name)
+    if split_name.lower() in {"val", "validation"}:
+        per_band_path = Path("outputs/metrics/per_band_val_metrics.csv")
+        per_band_path.parent.mkdir(parents=True, exist_ok=True)
+        per_band_metrics.to_csv(per_band_path, index=False)
+        print(f"{split_name} per-band metrics saved to {per_band_path}")
     return all_trues, all_preds, metrics
 
 

@@ -1,8 +1,42 @@
-# AES LLM Augmentation
+# Improving Automated Essay Scoring with Targeted LLM-Based Data Augmentation under Imbalanced Data
 
-Utilities for generating synthetic IELTS Task 2 essays with OpenAI or Claude, then training an AES model on configured IELTS data.
+[![Paper](https://img.shields.io/badge/Paper-KES%202026-blue)](#)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-brightgreen)](#)
 
-## Setup
+This repository provides the implementation artifact for the KES 2026 paper **"Improving Automated Essay Scoring with Targeted LLM-Based Data Augmentation under Imbalanced Data."** It contains a lightweight, standalone pipeline for training transformer-based Automated Essay Scoring (AES) models and generating targeted synthetic IELTS Writing Task 2 essays with Large Language Models.
+
+The codebase is designed for local execution and modular reproduction of the paper workflow: train an AES model, diagnose weak IELTS bands, generate targeted synthetic essays, add them to the training split, and retrain. It intentionally avoids remote experiment tracking so the workflow stays simple to run in local or Kaggle environments.
+
+## Reference Results
+
+The paper reports the following average improvements from the full experimental setup across transformer baselines:
+
+```text
+Average QWK improvement: +0.165
+Average MAE reduction:   -0.126
+Average MSE reduction:   -0.216
+```
+
+The paper also reports a substantial reduction in extreme-band error, including an approximately 67% MAE reduction for Band 9.0 in the targeted analysis.
+
+These numbers are reference results from the full paper pipeline. Exact local values depend on dataset version, model backbone, LLM provider/model, generated samples, random seeds, and the number of augmentation rounds.
+
+## Repository Structure
+
+```text
+llm-aes-aug/
+├── configs/                   # YAML training configuration files
+├── outputs/
+│   ├── metrics/               # Generated evaluation metrics
+│   └── synthetic/             # Generated synthetic IELTS CSV files
+├── synthetic_assets/          # Questions, few-shot exemplars, and band descriptions
+├── generate_synthetic_data.py # LLM synthesis script for OpenAI and Claude
+├── pipeline_training.py       # Training and evaluation pipeline
+├── requirements.txt           # Python dependencies
+└── setup.sh                   # Environment setup script
+```
+
+## Installation
 
 From the project directory:
 
@@ -12,34 +46,169 @@ bash setup.sh
 source venv/bin/activate
 ```
 
-The setup script creates `venv/`, installs PyTorch and the dependencies in `requirements.txt`, and verifies the main packages.
+The setup script creates `venv/`, installs the dependencies in `requirements.txt`, and verifies the main runtime packages.
 
-## Environment Variables
+## API Keys
 
-Create a local `.env` file in the repo root. Do not commit this file.
+Create a local `.env` file in the repository root. This file should not be committed.
 
-For OpenAI generation:
+```env
+OPENAI_API_KEY=your_openai_key_here
+ANTHROPIC_API_KEY=your_anthropic_key_here
 
-```bash
-OPENAI_API_KEY=your_openai_key
-```
-
-For Claude generation:
-
-```bash
-ANTHROPIC_API_KEY=your_anthropic_key
-```
-
-Optional model overrides:
-
-```bash
+# Optional model overrides
 OPENAI_MODEL=gpt-4o-mini
 ANTHROPIC_MODEL=claude-sonnet-4-0
 ```
 
-## Generate Synthetic Data
+The repository defaults to `gpt-4o-mini` for lower-cost OpenAI generation. For paper-style OpenAI generation, pass `--model gpt-4o` in the generation command. For Anthropic, use the configured Claude Sonnet model available to your account.
 
-The generator reads prompt assets from `synthetic_assets/` and writes flat CSV files to `outputs/synthetic/`.
+## Iterative Augmentation Workflow
+
+The paper workflow follows an error-driven loop:
+
+```text
+Evaluation -> Diagnosis -> Targeted Generation -> Data Integration -> Retraining
+```
+
+This repository provides standalone scripts for each step. The original full experiment loop was orchestrated externally, so the loop is reproduced here manually.
+
+### Step 1: Train The Baseline Model
+
+```bash
+venv/bin/python pipeline_training.py
+```
+
+The training script loads `configs/base.yaml`, then merges `configs/training_worst_band.yaml` by default. It saves local artifacts such as:
+
+```text
+best_model.pth
+scaler_config.pkl
+outputs/metrics/per_band_val_metrics.csv
+```
+
+### Step 2: Identify The Weakest Band
+
+Inspect the terminal output or open:
+
+```text
+outputs/metrics/per_band_val_metrics.csv
+```
+
+Select the validation band with the highest per-band MAE. This is the target band for the next synthetic generation round.
+
+### Step 3: Generate Targeted Synthetic Essays
+
+Generate 32 essays for the weakest band with 3 refinement iterations. For example, if Band 5 is the weakest band:
+
+Using OpenAI with the paper-style model:
+
+```bash
+venv/bin/python generate_synthetic_data.py 5 --provider openai --model gpt-4o --num-essays 32 --max-iterations 3
+```
+
+Using Claude:
+
+```bash
+venv/bin/python generate_synthetic_data.py 5 --provider claude --num-essays 32 --max-iterations 3
+```
+
+Generated files are written to:
+
+```text
+outputs/synthetic/band_<bands>_<timestamp>.csv
+```
+
+Each generated CSV contains:
+
+```text
+Question,Essay,Overall
+```
+
+### Step 4: Integrate Synthetic Data
+
+Copy the generated CSV into the training folder configured in `configs/base.yaml`:
+
+```bash
+cp outputs/synthetic/band_5_*.csv /path/to/data/original_24-09-20-04-09/training_worst_band/
+```
+
+The generator produces flat CSV files only. It does not create train, validation, or test split folders automatically.
+
+### Step 5: Retrain And Repeat
+
+```bash
+venv/bin/python pipeline_training.py
+```
+
+Repeat Steps 2-5 for the desired number of augmentation rounds.
+
+## Data Configuration
+
+Training data paths are configured in `configs/base.yaml`. The pipeline expects this directory layout:
+
+```text
+<data_path>/<data_folder>/
+├── <train_folder>/       # Original training CSVs plus injected synthetic CSVs
+├── <validation_folder>/  # Validation CSVs
+└── <test_folder>/        # Test CSVs
+```
+
+Example configuration:
+
+```yaml
+data_path: /kaggle/input/mielband-ielts-data-train
+data_folder: original_24-09-20-04-09
+train_folder: training_worst_band
+validation_folder: validation
+test_folder: test
+```
+
+With this configuration, the script reads CSV files from:
+
+```text
+/kaggle/input/mielband-ielts-data-train/original_24-09-20-04-09/training_worst_band/
+/kaggle/input/mielband-ielts-data-train/original_24-09-20-04-09/validation/
+/kaggle/input/mielband-ielts-data-train/original_24-09-20-04-09/test/
+```
+
+Input CSV files should contain:
+
+```text
+Question,Essay,Overall
+```
+
+The loader also accepts lowercase `question` and `answer` columns, which are renamed internally to `Question` and `Essay`.
+
+## Training Configuration
+
+Use environment overrides for quick checks:
+
+```bash
+EPOCHS=1 BATCH_SIZE=16 venv/bin/python pipeline_training.py
+```
+
+Use YAML settings for paper-style runs:
+
+```yaml
+bert_model_name: microsoft/deberta-base
+max_seq_length: 512
+batch_size: 32
+epochs: 200
+learning_rate: 0.0000458115
+patience: 50
+use_sigmoid: false
+checkpoint_path: ./best_model.pth
+scaler_path: ./scaler_config.pkl
+```
+
+To use a different config override file, set `DATA_AUGMENTATION_METHOD` to the filename without `.yaml`:
+
+```bash
+DATA_AUGMENTATION_METHOD=training_worst_band venv/bin/python pipeline_training.py
+```
+
+## Synthetic Generation Examples
 
 Generate one Band 5 essay with OpenAI:
 
@@ -59,169 +228,16 @@ Generate three essays for each of Bands 5, 6, and 7 with OpenAI:
 venv/bin/python generate_synthetic_data.py 5,6,7 --provider openai --num-essays 3 --max-iterations 1
 ```
 
-Generated files use this pattern:
+## Citation
 
-```text
-outputs/synthetic/band_<bands>_<timestamp>.csv
+If you use this codebase or generated data in your research, please cite the paper:
+
+```bibtex
+@inproceedings{le2026aesllmaugmentation,
+  title={Improving Automated Essay Scoring with Targeted LLM-Based Data Augmentation under Imbalanced Data},
+  author={Le, Duy Anh and Vo Thanh, Nghia and Trieu, Huy and Nam, Van Chi and Nguyen, Huy Tien and Le, Tung},
+  booktitle={30th International Conference on Knowledge-Based and Intelligent Information \& Engineering Systems (KES 2026)},
+  year={2026},
+  note={To appear}
+}
 ```
-
-Each generated CSV contains:
-
-```text
-Question,Essay,Overall
-```
-
-
-## Configure Training YAML
-
-Training configuration lives in `configs/base.yaml`. The file named by `data_augmentation_method` is merged on top of it; by default that is `configs/training_worst_band.yaml`.
-
-The most important part is the data path layout. The training script builds paths like this:
-
-```text
-<data_path>/<data_folder>/<train_folder>/*.csv
-<data_path>/<data_folder>/<validation_folder>/*.csv
-<data_path>/<data_folder>/<test_folder>/*.csv
-```
-
-Example:
-
-```yaml
-data_path: /kaggle/input/mielband-ielts-data-train
-data_folder: original_24-09-20-04-09
-train_folder: training_worst_band
-validation_folder: validation
-test_folder: test
-```
-
-With that config, the script expects CSV files under:
-
-```text
-/kaggle/input/mielband-ielts-data-train/original_24-09-20-04-09/training_worst_band/
-/kaggle/input/mielband-ielts-data-train/original_24-09-20-04-09/validation/
-/kaggle/input/mielband-ielts-data-train/original_24-09-20-04-09/test/
-```
-
-Each CSV should contain essay data with columns compatible with the loader. The common format is:
-
-```text
-Question,Essay,Overall
-```
-
-The loader also accepts lowercase source columns `question` and `answer`; it renames them to `Question` and `Essay` during preprocessing.
-
-If you want to train with generated synthetic data, copy the generated CSV from `outputs/synthetic/` into the configured training folder, for example:
-
-```bash
-cp outputs/synthetic/band_5_15-05-26-11-08.csv /path/to/data/original_24-09-20-04-09/training_worst_band/
-```
-
-You still need valid `validation/` and `test/` folders. The generator does not create those splits.
-
-Other useful config examples:
-
-```yaml
-bert_model_name: microsoft/deberta-base
-max_seq_length: 512
-batch_size: 32
-epochs: 50
-learning_rate: 0.0000458115
-patience: 50
-use_sigmoid: false
-checkpoint_path: ./best_model.pth
-scaler_path: ./scaler_config.pkl
-```
-
-To use a different override file, set `DATA_AUGMENTATION_METHOD` to the filename without `.yaml`:
-
-```bash
-DATA_AUGMENTATION_METHOD=training_worst_band venv/bin/python pipeline_training.py
-```
-
-
-## Manual Paper Reproduction Workflow
-
-This repository exposes the paper pipeline as manual standalone steps. The original full experiment loop was orchestrated externally, so this repo does not automatically run the entire train-diagnose-generate-retrain cycle for you.
-
-The manual loop is:
-
-1. Train a baseline model.
-2. Read validation metrics from the terminal output.
-3. Identify the weakest validation band.
-4. Generate synthetic essays for that target band.
-5. Copy the generated CSV into the configured training folder.
-6. Retrain the model.
-7. Repeat for the desired number of augmentation rounds.
-
-Train the baseline:
-
-```bash
-venv/bin/python pipeline_training.py
-```
-
-Choose the weakest band from validation analysis. For example, if Band 5 is the weakest band, generate 32 targeted essays with 3 refinement iterations:
-
-```bash
-venv/bin/python generate_synthetic_data.py 5 --provider openai --num-essays 32 --max-iterations 3
-```
-
-Claude version:
-
-```bash
-venv/bin/python generate_synthetic_data.py 5 --provider claude --num-essays 32 --max-iterations 3
-```
-
-Copy the generated CSV into your configured training folder:
-
-```bash
-cp outputs/synthetic/band_5_*.csv /path/to/data/original_24-09-20-04-09/training_worst_band/
-```
-
-Retrain after adding the generated data:
-
-```bash
-venv/bin/python pipeline_training.py
-```
-
-For the paper-style loop, repeat this process for multiple augmentation rounds. In the paper experiments, the targeted generation step used a batch of 32 essays and 3 refinement iterations per selected band.
-
-### Choosing The Worst Band
-
-The current training script prints overall validation and test metrics. For exact manual reproduction of the paper workflow, the training script should also print or save per-band validation MAE so users can directly select the weakest band from this repo.
-
-Until per-band validation metrics are added here, use this manual workflow when you already know the target band from external validation analysis or prior experiment logs.
-
-## Reference Paper Results
-
-The paper reports the following average improvements from the full experimental setup:
-
-```text
-Average QWK improvement: +0.165
-Average MAE reduction:   -0.126
-Average MSE reduction:   -0.216
-```
-
-These are reference results from the full paper pipeline, not guaranteed outputs from a single local README command. Exact values depend on dataset version, model backbone, provider/model, generated samples, random seeds, and the number of augmentation rounds.
-
-## Train The Model
-
-Run the training pipeline:
-
-```bash
-venv/bin/python pipeline_training.py
-```
-
-The training script loads `configs/base.yaml`, then merges `configs/training_worst_band.yaml` by default. It expects the configured data path to contain train, validation, and test split folders.
-
-Training saves local artifacts such as:
-
-```text
-best_model.pth
-scaler_config.pkl
-```
-
-## Config Notes
-
-Synthetic generation produces flat CSV files only. It does not automatically create the train/validation/test folder layout expected by the training pipeline.
-
-To train on generated data, place or copy the generated CSV into the training folder configured by `configs/base.yaml`, while keeping compatible validation and test folders available.
