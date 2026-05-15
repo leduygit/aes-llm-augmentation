@@ -11,7 +11,7 @@ The codebase is designed for local execution and modular reproduction of the pap
 
 Our targeted augmentation framework reduces model bias toward majority mid-range bands by adding synthetic samples where validation errors are highest. We evaluate this strategy across multiple transformer backbones and report both representative absolute performance and average performance deltas.
 
-### Absolute Performance (Before vs. After Augmentation)
+### Comparison of model performance before and after data augmentation across independent runs.
 
 The table below reports baseline performance without augmentation for each backbone and the representative augmented result for the BERT-based model. The augmented BERT setting achieves higher agreement with human raters and lower error while showing tighter variance across runs.
 
@@ -22,7 +22,7 @@ The table below reports baseline performance without augmentation for each backb
 | **No Augmentation** | BERT-Large-Uncased | 0.67 ± 0.06 | 0.68 ± 0.05 | 0.69 ± 0.09 |
 | **Augmentation** | **Our model (Backbone: BERT)** | **0.77 ± 0.03** | **0.58 ± 0.01** | **0.52 ± 0.03** |
 
-### Average Performance Differences
+### Average performance differences of transformer-based models before and after data augmentation.
 
 To summarize generalization across architectures, the following table reports average metric changes after adding targeted synthetic data to each model's training pipeline.
 
