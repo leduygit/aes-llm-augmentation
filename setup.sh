@@ -65,6 +65,8 @@ python -c "import transformers; print(f'Transformers: {transformers.__version__}
 python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
 python -c "import pandas; print(f'Pandas: {pandas.__version__}')"
 python -c "import openai; print(f'OpenAI: {openai.__version__}')"
+python -c "import anthropic; print(f'Anthropic: {anthropic.__version__}')"
+python -c "import dotenv; print('python-dotenv: installed')"
 echo ""
 echo "Environment setup successful."
 echo ""

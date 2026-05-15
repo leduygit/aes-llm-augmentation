@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate flat CSV synthetic IELTS Task 2 essays with the OpenAI API."""
+"""Generate flat CSV synthetic IELTS Task 2 essays with OpenAI or Claude."""
 from __future__ import annotations
 
 import argparse
@@ -12,19 +12,23 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 import pandas as pd
-
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
 
 PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_ASSET_DIR = PROJECT_DIR / "synthetic_assets"
 DEFAULT_OUTPUT_DIR = PROJECT_DIR / "outputs" / "synthetic"
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-0"
+
+
+class TextProvider(Protocol):
+    name: str
+    model: str
+
+    def complete(self, system_content: str, user_content: str, max_tokens: int, temperature: float) -> str:
+        ...
 
 
 def env_int(name: str, default: int) -> int:
@@ -60,18 +64,98 @@ def retry_call(func: Callable, max_retries: int, delay: float, *args, **kwargs) 
             time.sleep(delay)
 
 
+def load_dotenv_or_exit() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        print("Error: python-dotenv is required to load .env. Install requirements.txt or rerun setup.sh.")
+        sys.exit(1)
+    load_dotenv(PROJECT_DIR / ".env")
+
+
+class OpenAIProvider:
+    name = "openai"
+
+    def __init__(self, model: Optional[str] = None):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("Error: OpenAI API key required. Set OPENAI_API_KEY in the environment or in .env")
+            sys.exit(1)
+        try:
+            from openai import OpenAI
+        except ImportError:
+            print("Error: The openai package is required for OpenAI generation. Install requirements.txt or rerun setup.sh.")
+            sys.exit(1)
+        self.model = model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+        self.client = OpenAI(api_key=api_key)
+
+    def complete(self, system_content: str, user_content: str, max_tokens: int, temperature: float) -> str:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
+
+
+class ClaudeProvider:
+    name = "claude"
+
+    def __init__(self, model: Optional[str] = None):
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            print("Error: Anthropic API key required. Set ANTHROPIC_API_KEY in the environment or in .env")
+            sys.exit(1)
+        try:
+            import anthropic
+        except ImportError:
+            print("Error: The anthropic package is required for Claude generation. Install requirements.txt or rerun setup.sh.")
+            sys.exit(1)
+        self.model = model or os.getenv("ANTHROPIC_MODEL") or DEFAULT_CLAUDE_MODEL
+        self.client = anthropic.Anthropic(api_key=api_key)
+
+    def complete(self, system_content: str, user_content: str, max_tokens: int, temperature: float) -> str:
+        response = self.client.messages.create(
+            model=self.model,
+            system=system_content,
+            messages=[{"role": "user", "content": user_content}],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        if hasattr(response, "content"):
+            if isinstance(response.content, list):
+                return "".join(block.text for block in response.content if hasattr(block, "text")).strip()
+            return str(response.content).strip()
+        return str(response).strip()
+
+
+def build_provider(provider_name: str, model: Optional[str]) -> TextProvider:
+    if provider_name == "openai":
+        return OpenAIProvider(model=model)
+    if provider_name == "claude":
+        return ClaudeProvider(model=model)
+    raise ValueError(f"Unsupported provider: {provider_name}")
+
+
 class SyntheticIELTSGenerator:
-    def __init__(self, asset_dir: Path, model: str, temperature: float, max_retries: int, retry_delay: float):
+    def __init__(
+        self,
+        asset_dir: Path,
+        provider: TextProvider,
+        temperature: float,
+        max_retries: int,
+        retry_delay: float,
+    ):
         self.asset_dir = asset_dir
-        self.model = model
+        self.provider = provider
         self.temperature = temperature
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        try:
-            from openai import OpenAI
-        except ImportError as exc:
-            raise RuntimeError("The openai package is required for generation. Install requirements.txt first.") from exc
-        self.client = OpenAI()
         self._band_descriptions: Optional[Dict[str, Dict[str, str]]] = None
         self._fewshot_df: Optional[pd.DataFrame] = None
         self._questions_df: Optional[pd.DataFrame] = None
@@ -97,27 +181,15 @@ class SyntheticIELTSGenerator:
                 self._band_descriptions = json.load(f)
         return self._band_descriptions
 
-    def call_openai(self, system_content: str, user_content: str, max_tokens: int) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
-            max_tokens=max_tokens,
-            temperature=self.temperature,
-        )
-        content = response.choices[0].message.content
-        return content.strip() if content else ""
-
-    def openai_with_retry(self, system_content: str, user_content: str, max_tokens: int) -> str:
+    def complete_with_retry(self, system_content: str, user_content: str, max_tokens: int) -> str:
         return retry_call(
-            self.call_openai,
+            self.provider.complete,
             self.max_retries,
             self.retry_delay,
             system_content=system_content,
             user_content=user_content,
             max_tokens=max_tokens,
+            temperature=self.temperature,
         )
 
     def get_examples_for_band(self, band: int, num_examples: int = 5) -> List[Dict[str, Any]]:
@@ -131,8 +203,13 @@ class SyntheticIELTSGenerator:
         examples = []
         for _, row in band_examples.sample(n=num_examples).iterrows():
             examples.append({
-                "question": row["Question"], "essay": row["Essay"], "overall": row["Overall"],
-                "ta": row["ta"], "cc": row["cc"], "lr": row["lr"], "gr": row["gr"],
+                "question": row["Question"],
+                "essay": row["Essay"],
+                "overall": row["Overall"],
+                "ta": row["ta"],
+                "cc": row["cc"],
+                "lr": row["lr"],
+                "gr": row["gr"],
             })
         return examples
 
@@ -216,7 +293,7 @@ IMPORTANT: Write in PLAIN TEXT only. Do NOT use markdown formatting."""
             desc_text = "\n".join(f"{key.upper()}: {value}" for key, value in band_desc.items())
             system_content += f"\n\nHere are the characteristics of a Band {band} essay:\n{desc_text}\n\nEnsure your essay matches these characteristics exactly."
         try:
-            return self.openai_with_retry(system_content=system_content, user_content=prompt, max_tokens=max_tokens)
+            return self.complete_with_retry(system_content=system_content, user_content=prompt, max_tokens=max_tokens)
         except Exception as exc:
             print(f"Error generating essay: {exc}")
             traceback.print_exc()
@@ -233,9 +310,14 @@ IMPORTANT: Write in PLAIN TEXT only. Do NOT use markdown formatting."""
 
     def create_default_scores(self, feedback: str) -> Dict[str, Any]:
         return {
-            "task_achievement": 6.0, "coherence_cohesion": 6.0, "lexical_resource": 6.0,
-            "grammatical_range": 6.0, "overall": 6.0, "feedback": feedback,
-            "word_count": None, "format_issues": "Scoring unavailable",
+            "task_achievement": 6.0,
+            "coherence_cohesion": 6.0,
+            "lexical_resource": 6.0,
+            "grammatical_range": 6.0,
+            "overall": 6.0,
+            "feedback": feedback,
+            "word_count": None,
+            "format_issues": "Scoring unavailable",
         }
 
     def score_essay(self, essay: str, question: str) -> Dict[str, Any]:
@@ -274,7 +356,7 @@ Essay to score:
 
 Please score this essay according to IELTS criteria."""
         try:
-            response = self.openai_with_retry(system_content=system_content, user_content=user_content, max_tokens=300)
+            response = self.complete_with_retry(system_content=system_content, user_content=user_content, max_tokens=300)
             try:
                 return self.extract_json_object(response)
             except json.JSONDecodeError:
@@ -326,7 +408,7 @@ Current Essay:
 
 Please provide specific change recommendations to exactly reach Band {target_band}."""
         try:
-            return self.openai_with_retry(system_content=system_content, user_content=user_content, max_tokens=400)
+            return self.complete_with_retry(system_content=system_content, user_content=user_content, max_tokens=400)
         except Exception as exc:
             return f"Could not generate feedback due to error: {exc}"
 
@@ -366,8 +448,11 @@ Please rewrite this essay to address the feedback and reach Band {target_band} l
             else:
                 feedback = None
             iterations.append({
-                "iteration": iteration + 1, "essay": essay, "scores": scores,
-                "feedback": feedback, "target_reached": abs(current_overall - target_band) <= 0.5,
+                "iteration": iteration + 1,
+                "essay": essay,
+                "scores": scores,
+                "feedback": feedback,
+                "target_reached": abs(current_overall - target_band) <= 0.5,
             })
             print(f"Essay: {essay[:100]}...")
             print(
@@ -430,39 +515,38 @@ def print_summary(all_results: List[Dict[str, Any]], bands: List[int]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate synthetic IELTS essays using the OpenAI API")
+    parser = argparse.ArgumentParser(description="Generate synthetic IELTS essays using OpenAI or Claude")
     parser.add_argument("bands", type=parse_bands, help="Target band score(s), e.g. 7 or 5,6,7")
+    parser.add_argument("--provider", choices=["openai", "claude"], default=os.getenv("SYNTHETIC_PROVIDER", "openai"))
     parser.add_argument("--num-essays", type=int, default=env_int("SYNTHETIC_NUM_ESSAYS", 1))
     parser.add_argument("--max-iterations", type=int, default=env_int("SYNTHETIC_MAX_ITERATIONS", 1))
     parser.add_argument("--asset-dir", type=Path, default=Path(os.getenv("SYNTHETIC_ASSET_DIR", DEFAULT_ASSET_DIR)))
     parser.add_argument("--output-dir", type=Path, default=Path(os.getenv("SYNTHETIC_OUTPUT_DIR", DEFAULT_OUTPUT_DIR)))
-    parser.add_argument("--model", default=os.getenv("OPENAI_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--temperature", type=float, default=env_float("OPENAI_TEMPERATURE", 0.7))
-    parser.add_argument("--max-retries", type=int, default=env_int("OPENAI_MAX_RETRIES", 3))
-    parser.add_argument("--retry-delay", type=float, default=env_float("OPENAI_RETRY_DELAY", 2.0))
+    parser.add_argument("--model", default=None, help="Override selected provider model")
+    parser.add_argument("--temperature", type=float, default=env_float("OPENAI_TEMPERATURE", env_float("ANTHROPIC_TEMPERATURE", 0.7)))
+    parser.add_argument("--max-retries", type=int, default=env_int("SYNTHETIC_MAX_RETRIES", env_int("OPENAI_MAX_RETRIES", env_int("ANTHROPIC_MAX_RETRIES", 3))))
+    parser.add_argument("--retry-delay", type=float, default=env_float("SYNTHETIC_RETRY_DELAY", env_float("OPENAI_RETRY_DELAY", env_float("ANTHROPIC_RETRY_DELAY", 2.0))))
     parser.add_argument("--seed", type=int, default=env_int("SYNTHETIC_RANDOM_SEED", 42))
     return parser.parse_args()
 
 
 def main() -> None:
-    if load_dotenv is not None:
-        load_dotenv(PROJECT_DIR / ".env")
     args = parse_args()
+    load_dotenv_or_exit()
     random.seed(args.seed)
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Error: OpenAI API key required. Set OPENAI_API_KEY in the environment or in .env")
-        sys.exit(1)
-    generator = SyntheticIELTSGenerator(args.asset_dir, args.model, args.temperature, args.max_retries, args.retry_delay)
+    provider = build_provider(args.provider, args.model)
+    generator = SyntheticIELTSGenerator(args.asset_dir, provider, args.temperature, args.max_retries, args.retry_delay)
     try:
         _, questions_df = generator.load_data()
     except Exception as exc:
         print(f"Error loading generation assets: {exc}")
         sys.exit(1)
     print("Running iterative improvement mode:")
+    print(f"- Provider: {provider.name}")
+    print(f"- Model: {provider.model}")
     print(f"- Target bands: {', '.join(map(str, args.bands))}")
     print(f"- Number of essays per band: {args.num_essays}")
     print(f"- Max iterations per essay: {args.max_iterations}")
-    print(f"- Model: {args.model}")
     print(f"- Asset directory: {args.asset_dir}")
     print(f"- Output directory: {args.output_dir}")
     all_results = []
@@ -476,8 +560,11 @@ def main() -> None:
             if iterations:
                 final_iteration = iterations[-1]
                 all_results.append({
-                    "essay_number": essay_counter, "target_band": band, "question": question,
-                    "essay": final_iteration["essay"], "scores": final_iteration["scores"],
+                    "essay_number": essay_counter,
+                    "target_band": band,
+                    "question": question,
+                    "essay": final_iteration["essay"],
+                    "scores": final_iteration["scores"],
                 })
             essay_counter += 1
     if all_results:
