@@ -9,17 +9,31 @@ The codebase is designed for local execution and modular reproduction of the pap
 
 ## Reference Results
 
-The paper reports the following average improvements from the full experimental setup across transformer baselines:
+Our targeted augmentation framework reduces model bias toward majority mid-range bands by adding synthetic samples where validation errors are highest. We evaluate this strategy across multiple transformer backbones and report both representative absolute performance and average performance deltas.
 
-```text
-Average QWK improvement: +0.165
-Average MAE reduction:   -0.126
-Average MSE reduction:   -0.216
-```
+### Absolute Performance (Before vs. After Augmentation)
 
-The paper also reports a substantial reduction in extreme-band error, including an approximately 67% MAE reduction for Band 9.0 in the targeted analysis.
+The table below reports baseline performance without augmentation for each backbone and the representative augmented result for the BERT-based model. The augmented BERT setting achieves higher agreement with human raters and lower error while showing tighter variance across runs.
 
-These numbers are reference results from the full paper pipeline. Exact local values depend on dataset version, model backbone, LLM provider/model, generated samples, random seeds, and the number of augmentation rounds.
+| Data Setting | Model | QWK (↑) | MAE (↓) | MSE (↓) |
+| :--- | :--- | :--- | :--- | :--- |
+| **No Augmentation** | DeBERTa-Base | 0.53 ± 0.30 | 0.75 ± 0.14 | 0.82 ± 0.32 |
+| **No Augmentation** | RoBERTa-Base | 0.60 ± 0.06 | 0.73 ± 0.06 | 0.77 ± 0.14 |
+| **No Augmentation** | BERT-Large-Uncased | 0.67 ± 0.06 | 0.68 ± 0.05 | 0.69 ± 0.09 |
+| **Augmentation** | **Our model (Backbone: BERT)** | **0.77 ± 0.03** | **0.58 ± 0.01** | **0.52 ± 0.03** |
+
+### Average Performance Differences
+
+To summarize generalization across architectures, the following table reports average metric changes after adding targeted synthetic data to each model's training pipeline.
+
+| Model | Mean MAE Diff (↓) | Mean MSE Diff (↓) | Mean QWK Diff (↑) |
+| :--- | :--- | :--- | :--- |
+| **DeBERTa-Base** | -0.159 | -0.272 | +0.235 |
+| **RoBERTa-Base** | -0.119 | -0.212 | +0.159 |
+| **BERT-Large-Uncased** | -0.100 | -0.164 | +0.101 |
+| **All Models (Average)** | **-0.126** | **-0.216** | **+0.165** |
+
+> **Note on Reproducibility:** The metrics above are reference results from the full paper pipeline and multiple independent runs. Local results may differ depending on dataset version, model backbone, provider/model choice, generated samples, random seeds, hardware, and the number of augmentation rounds.
 
 ## Repository Structure
 
