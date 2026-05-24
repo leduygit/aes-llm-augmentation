@@ -15,18 +15,18 @@ Our targeted augmentation framework reduces model bias toward majority mid-range
 
 The table below reports baseline performance without augmentation for each backbone and the representative augmented result for the BERT-based model. The augmented BERT setting achieves higher agreement with human raters and lower error while showing tighter variance across runs.
 
-| Data Setting | Model | QWK (↑) | MAE (↓) | MSE (↓) |
+| Data Setting | Model | QWK (higher is better) | MAE (lower is better) | MSE (lower is better) |
 | :--- | :--- | :--- | :--- | :--- |
-| **No Augmentation** | DeBERTa-Base | 0.53 ± 0.30 | 0.75 ± 0.14 | 0.82 ± 0.32 |
-| **No Augmentation** | RoBERTa-Base | 0.60 ± 0.06 | 0.73 ± 0.06 | 0.77 ± 0.14 |
-| **No Augmentation** | BERT-Large-Uncased | 0.67 ± 0.06 | 0.68 ± 0.05 | 0.69 ± 0.09 |
-| **Augmentation** | **Our model (Backbone: BERT)** | **0.77 ± 0.03** | **0.58 ± 0.01** | **0.52 ± 0.03** |
+| **No Augmentation** | DeBERTa-Base | 0.53 +/- 0.30 | 0.75 +/- 0.14 | 0.82 +/- 0.32 |
+| **No Augmentation** | RoBERTa-Base | 0.60 +/- 0.06 | 0.73 +/- 0.06 | 0.77 +/- 0.14 |
+| **No Augmentation** | BERT-Large-Uncased | 0.67 +/- 0.06 | 0.68 +/- 0.05 | 0.69 +/- 0.09 |
+| **Augmentation** | **Our model (Backbone: BERT)** | **0.77 +/- 0.03** | **0.58 +/- 0.01** | **0.52 +/- 0.03** |
 
 ### Average performance differences of transformer-based models before and after data augmentation.
 
 To summarize generalization across architectures, the following table reports average metric changes after adding targeted synthetic data to each model's training pipeline.
 
-| Model | Mean MAE Diff (↓) | Mean MSE Diff (↓) | Mean QWK Diff (↑) |
+| Model | Mean MAE Diff (lower is better) | Mean MSE Diff (lower is better) | Mean QWK Diff (higher is better) |
 | :--- | :--- | :--- | :--- |
 | **DeBERTa-Base** | -0.159 | -0.272 | +0.235 |
 | **RoBERTa-Base** | -0.119 | -0.212 | +0.159 |
@@ -39,16 +39,21 @@ To summarize generalization across architectures, the following table reports av
 
 ```text
 llm-aes-aug/
-├── configs/                   # YAML training configuration files
-├── outputs/
-│   ├── metrics/               # Generated evaluation metrics
-│   └── synthetic/             # Generated synthetic IELTS CSV files
-├── synthetic_assets/          # Questions, few-shot exemplars, and band descriptions
-├── generate_synthetic_data.py # LLM synthesis script for OpenAI and Claude
-├── pipeline_training.py       # Training and evaluation pipeline
-├── requirements.txt           # Python dependencies
-└── setup.sh                   # Environment setup script
+|-- configs/                    # YAML training configuration files
+|-- outputs/
+|   |-- metrics/                # Generated evaluation metrics
+|   `-- synthetic/              # Generated synthetic IELTS CSV files
+|-- synthetic_assets/           # Questions, few-shot exemplars, and band descriptions
+|-- synthetic_samples_analysis/ # Audited synthetic sample CSV and analysis notes
+|-- generate_synthetic_data.py  # LLM synthesis script for OpenAI and Claude
+|-- pipeline_training.py        # Training and evaluation pipeline
+|-- requirements.txt            # Python dependencies
+`-- setup.sh                    # Environment setup script
 ```
+
+## Synthetic Sample Validation
+
+The repository includes a manually audited sample set in `synthetic_samples_analysis/synthetic_samples.csv`. The accompanying [analysis documentation](synthetic_samples_analysis/README.md) summarizes expert re-grading results, label alignment, and methodological considerations for using these synthetic essays in AES augmentation. The audit shows a conservative alignment pattern in this small sample, where generated essays were often evaluated below their prompted target bands; however, the downstream reference results indicate that targeted augmentation still improves AES performance.
 
 ## Installation
 
@@ -163,9 +168,9 @@ Training data paths are configured in `configs/base.yaml`. The pipeline expects 
 
 ```text
 <data_path>/<data_folder>/
-├── <train_folder>/       # Original training CSVs plus injected synthetic CSVs
-├── <validation_folder>/  # Validation CSVs
-└── <test_folder>/        # Test CSVs
+|-- <train_folder>/       # Original training CSVs plus injected synthetic CSVs
+|-- <validation_folder>/  # Validation CSVs
+`-- <test_folder>/        # Test CSVs
 ```
 
 Example configuration:
